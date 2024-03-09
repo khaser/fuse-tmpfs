@@ -1,0 +1,8 @@
+*.o
+html/
+bbfs.log
+index.html
+nohup.out
+task-01.odt
+.direnv
+.cache

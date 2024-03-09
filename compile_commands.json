@@ -1,0 +1,38 @@
+[
+  {
+    "arguments": [
+      "/nix/store/90h6k8ylkgn81k10190v5c9ldyjpzgl9-gcc-wrapper-12.3.0/bin/gcc",
+      "-DHAVE_CONFIG_H",
+      "-I.",
+      "-D_FILE_OFFSET_BITS=64",
+      "-I/nix/store/9wx3gd9ls50mcsagin70bdvarb8hh4j7-fuse-2.9.9/include/fuse",
+      "-g",
+      "-O2",
+      "-c",
+      "-o",
+      "bbfs.o",
+      "bbfs.c"
+    ],
+    "directory": "/home/khaser/univer/sem_6/OS/homeworks/1/src",
+    "file": "/home/khaser/univer/sem_6/OS/homeworks/1/src/bbfs.c",
+    "output": "/home/khaser/univer/sem_6/OS/homeworks/1/src/bbfs.o"
+  },
+  {
+    "arguments": [
+      "/nix/store/90h6k8ylkgn81k10190v5c9ldyjpzgl9-gcc-wrapper-12.3.0/bin/gcc",
+      "-DHAVE_CONFIG_H",
+      "-I.",
+      "-D_FILE_OFFSET_BITS=64",
+      "-I/nix/store/9wx3gd9ls50mcsagin70bdvarb8hh4j7-fuse-2.9.9/include/fuse",
+      "-g",
+      "-O2",
+      "-c",
+      "-o",
+      "log.o",
+      "log.c"
+    ],
+    "directory": "/home/khaser/univer/sem_6/OS/homeworks/1/src",
+    "file": "/home/khaser/univer/sem_6/OS/homeworks/1/src/log.c",
+    "output": "/home/khaser/univer/sem_6/OS/homeworks/1/src/log.o"
+  }
+]
