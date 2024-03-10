@@ -43,6 +43,7 @@
 
 #include "log.h"
 #include <assert.h>
+#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
 static int add_dentry(struct dir* dir, const struct dentry dentry)
 {
@@ -203,10 +204,8 @@ int tmpfs_mknod(const char *path, mode_t mode, dev_t dev)
     struct inode* inode;
     retstat = add_node(path, mode | S_IFREG, &inode);
     if (!retstat) {
-        struct reg* reg = malloc(sizeof(struct reg));
-        reg->size = 0;
-        reg->content = malloc(0);
-        inode->data_ptr = reg;
+        inode->stat.st_size = 0;
+        inode->data_ptr = malloc(0);
     }
     return retstat;
 }
@@ -298,82 +297,78 @@ int tmpfs_link(const char *path, const char *newpath)
     return log_syscall("link", link(fpath, fnewpath), 0);
 }
 
-// TODO
-/** Change the size of a file */
 int tmpfs_truncate(const char *path, off_t newsize)
 {
-    char fpath[PATH_MAX];
+    struct inode* inode;
+    int retstat = resolve_inode(path, -1, &inode);
+    if (retstat) {
+        goto ret;
+    }
 
-    log_msg("\nbb_truncate(path=\"%s\", newsize=%lld)\n",
-           path, newsize);
-    assert(0);
+    inode->data_ptr = realloc(inode->data_ptr, newsize);
+    if (newsize > inode->stat.st_size) {
+        memset(inode->data_ptr + inode->stat.st_size, 0, newsize - inode->stat.st_size);
+    }
+    inode->stat.st_size = newsize;
 
-    return log_syscall("truncate", truncate(fpath, newsize), 0);
+    ret:
+    return retstat;
 }
 
-// TODO
 int tmpfs_open(const char *path, struct fuse_file_info *fi)
 {
     int retstat = 0;
-    int fd;
-    char fpath[PATH_MAX];
 
-    log_msg("\nbb_open(path\"%s\", fi=0x%08x)\n",
-           path, fi);
-    assert(0);
-
-    // if the open call succeeds, my retstat is the file descriptor,
-    // else it's -errno.  I'm making sure that in that case the saved
-    // file descriptor is exactly -1.
-    fd = log_syscall("open", open(fpath, fi->flags), 0);
-    if (fd < 0)
-       retstat = log_error("open");
-
-    fi->fh = fd;
-
-    log_fi(fi);
+    struct inode* inode;
+    retstat = resolve_inode(path, -1, &inode);
+    if (!retstat) {
+        if (inode->stat.st_mode & S_IFREG) {
+            fi->fh = inode;
+        } else {
+            retstat = -EISDIR;
+        }
+    }
 
     return retstat;
 }
 
-// TODO
 int tmpfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
     int retstat = 0;
+    struct inode* inode = fi->fh;
 
-    log_msg("\nbb_read(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
-           path, buf, size, offset, fi);
-    // no need to get fpath on this one, since I work from fi->fh not the path
-    log_fi(fi);
+    int to_read = MIN((inode->stat.st_size - offset) - size, size);
+    if (to_read < 0) {
+        retstat = 0;
+    } else {
+        memcpy(buf, inode->data_ptr + offset, to_read);
+        retstat = to_read;
+    }
 
-    return log_syscall("pread", pread(fi->fh, buf, size, offset), 0);
+    return retstat;
 }
 
-// TODO
 int tmpfs_write(const char *path, const char *buf, size_t size, off_t offset,
             struct fuse_file_info *fi)
 {
-    int retstat = 0;
+    struct inode* inode = fi->fh;
 
-    log_msg("\nbb_write(path=\"%s\", buf=0x%08x, size=%d, offset=%lld, fi=0x%08x)\n",
-           path, buf, size, offset, fi
-           );
-    // no need to get fpath on this one, since I work from fi->fh not the path
-    log_fi(fi);
+    if (size + offset > inode->stat.st_size) {
+        // TODO oom case error catch
+        inode->data_ptr = realloc(inode->data_ptr, size + offset);
+        inode->stat.st_size = size + offset;
+    }
 
-    return log_syscall("pwrite", pwrite(fi->fh, buf, size, offset), 0);
+    memcpy(inode->data_ptr + offset, buf, size);
+
+    return size;
 }
 
-// TODO
 int tmpfs_release(const char *path, struct fuse_file_info *fi)
 {
-    log_msg("\nbb_release(path=\"%s\", fi=0x%08x)\n",
-         path, fi);
-    log_fi(fi);
-
-    // We need to close the file.  Had we allocated any resources
-    // (buffers etc) we'd need to free them here as well.
-    return log_syscall("close", close(fi->fh), 0);
+    int retstat = 0;
+    // TODO
+    return retstat;
 }
 
 int tmpfs_opendir(const char *path, struct fuse_file_info *fi)
@@ -449,17 +444,17 @@ struct fuse_operations tmpfs_oper = {
   .getattr = tmpfs_getattr, // done
   .opendir = tmpfs_opendir, // done
   .getdir = NULL,
-  .mknod = tmpfs_mknod,
+  .mknod = tmpfs_mknod, // done
   .mkdir = tmpfs_mkdir, // done
   .unlink = tmpfs_unlink,
   .rmdir = tmpfs_rmdir, // done
   .rename = tmpfs_rename,
   .link = tmpfs_link,
-  .truncate = tmpfs_truncate,
-  .open = tmpfs_open,
-  .read = tmpfs_read,
-  .write = tmpfs_write,
-  .release = tmpfs_release,
+  .truncate = tmpfs_truncate, // done
+  .open = tmpfs_open, // done
+  .read = tmpfs_read, // done
+  .write = tmpfs_write, // done
+  .release = tmpfs_release, // done
   .readdir = tmpfs_readdir, // done
   .init = tmpfs_init, // done
   .destroy = tmpfs_destroy,

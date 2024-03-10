@@ -43,11 +43,6 @@ struct dir {
     struct dentry entries[INODES_IN_DIRECTORY];
 };
 
-struct reg {
-    unsigned int size;
-    void* content;
-};
-
 #include <limits.h>
 #include <stdio.h>
 struct tmpfs_state {
