@@ -93,7 +93,6 @@ static int add_dentry(const char *path, struct inode *target_inode, struct inode
 
 static int rm_dentry(struct dir* dir, const struct inode* inode)
 {
-    // TODO: rewrite to recursive variant to work correctly with hard links
     int retstat = 0;
 
     for (struct dentry *entry = dir->entries; entry != dir->entries + INODES_IN_DIRECTORY; ++entry) {
@@ -244,9 +243,11 @@ int tmpfs_unlink(const char *path)
 {
     struct inode* inode;
     int retstat = resolve_inode(path, -1, &inode);
-    if (!retstat && --inode->stat.st_nlink == 0 && inode->open_count == 0) {
-        inode->is_active = 0;
+    if (!retstat) {
         rm_dentry(inode->parent->data_ptr, inode);
+        if (--inode->stat.st_nlink == 0 && inode->open_count == 0) {
+            inode->is_active = 0;
+        }
     }
     return retstat;
 }
@@ -398,6 +399,9 @@ int tmpfs_release(const char *path, struct fuse_file_info *fi)
 {
     struct inode* inode = fi->fh;
     inode->open_count--;
+    if (inode->stat.st_nlink == 0 && inode->open_count == 0) {
+        inode->is_active = 0;
+    }
     return 0;
 }
 
