@@ -44,21 +44,33 @@
 #include "log.h"
 #include <assert.h>
 
-// TODO: refactor to single return
-
 static int add_dentry(struct dir* dir, const struct dentry dentry)
 {
+    int retstat = -EMLINK;
+
     for (struct dentry *entry = dir->entries; entry != dir->entries + INODES_IN_DIRECTORY; ++entry) {
         if (!entry->is_active) {
             memcpy(entry, &dentry, sizeof(struct dentry));
-            return 0;
+            retstat = 0;
+            break;
         }
     }
-    return -EMLINK;
+
+    return retstat;
 }
 
-static int resolve_inode(const char *path, int req_component)
+static struct dir* init_dir(struct inode *self, struct inode *parent)
 {
+    struct dir *dir = malloc(sizeof(struct dir));
+    dir->entries[0] = (struct dentry) { "..", parent, 1 };
+    dir->entries[1] = (struct dentry) { ".", self, 1 };
+    return dir;
+}
+
+static int resolve_inode(const char *path, int req_component, struct inode **res)
+{
+    int retstat = 0;
+
     if (req_component < 0) {
         int components = 0;
         const char *i = path;
@@ -68,7 +80,6 @@ static int resolve_inode(const char *path, int req_component)
         components += (*(i-1) != '/');
         req_component = components + req_component;
     }
-
 
     struct inode *cur = TMPFS_DATA->inodes;
     for (int i = 0; i < req_component; ++i) {
@@ -90,34 +101,31 @@ static int resolve_inode(const char *path, int req_component)
             }
         }
 
-        return -ENOENT;
+        retstat = -ENOENT;
+        break;
 
         found:
         path = next_token;
     }
 
-    log_msg("    tmpfs_resolve:  path = \"%s\", inode = \"%p\"\n", path, cur);
-    return cur;
+    log_msg("    tmpfs_resolve:  path = %s, inode = %p\n", path, cur);
+    *res = cur;
+    return retstat;
 }
 
-/** Get file attributes.
- *
- * Similar to stat().  The 'st_dev' and 'st_blksize' fields are
- * ignored.  The 'st_ino' field is ignored except if the 'use_ino'
- * mount option is given.
- */
 int tmpfs_getattr(const char *path, struct stat *statbuf)
 {
+    int retstat = 0;
     log_msg("\ntmpfs_getattr(path=\"%s\", statbuf=0x%08x)\n", path, statbuf);
 
-    int res = resolve_inode(path, -1);
-    if (res < 0) {
-        return res;
-    }
-    struct inode* inode = (struct inode*) res;
+    struct inode* inode;
+    retstat = resolve_inode(path, -1, &inode);
 
-    memcpy(statbuf, &inode->stat, sizeof(struct stat));
-    return 0;
+    if (!retstat) {
+        memcpy(statbuf, &inode->stat, sizeof(struct stat));
+    }
+
+    return retstat;
 }
 
 // TODO
@@ -136,16 +144,9 @@ int tmpfs_mknod(const char *path, mode_t mode, dev_t dev)
     return retstat;
 }
 
-struct dir* init_dir(struct inode *self, struct inode *parent) {
-    struct dir *dir = malloc(sizeof(struct dir));
-    dir->entries[0] = (struct dentry) { "..", parent, 1 };
-    dir->entries[1] = (struct dentry) { ".", self, 1 };
-    return dir;
-}
-
-/** Create a directory */
 int tmpfs_mkdir(const char *path, mode_t mode)
 {
+    int retstat = -ENOMEM;
     log_msg("\nmkdir(path=\"%s\", mode=0%3o)\n", path, mode);
     int i = 0;
     for (; i < INODES_LIMIT; ++i) {
@@ -156,11 +157,9 @@ int tmpfs_mkdir(const char *path, mode_t mode)
             stat.st_uid = ctx->uid;
             stat.st_gid = ctx->gid;
 
-            int tmp = resolve_inode(path, -2);
-            if (tmp < 0) {
-                return tmp;
-            }
-            struct inode* parent_inode = tmp;
+            struct inode* parent_inode;
+            retstat = resolve_inode(path, -2, &parent_inode);
+            if (retstat) break;
 
             struct dir *dir = init_dir(TMPFS_DATA->inodes + i, parent_inode);
             TMPFS_DATA->inodes[i] = (struct inode) { stat, DIRECTORY, dir, parent_inode, 1 };
@@ -172,15 +171,17 @@ int tmpfs_mkdir(const char *path, mode_t mode)
             char *dirname = strrchr(path, '/') + 1;
 
             if (strlen(dirname) >= NAME_LEN) {
-                return -ENAMETOOLONG;
+                retstat = -ENAMETOOLONG;
+                break;
             }
             strcpy(dentry.name, dirname);
 
-            return add_dentry(parent_inode->data_ptr, dentry);
+            retstat = add_dentry(parent_inode->data_ptr, dentry);
+            break;
         }
     }
 
-    return -ENOMEM;
+    return retstat;
 }
 
 // TODO
@@ -196,17 +197,37 @@ int tmpfs_unlink(const char *path)
     return log_syscall("unlink", unlink(fpath), 0);
 }
 
-// TODO
-/** Remove a directory */
 int tmpfs_rmdir(const char *path)
 {
-    char fpath[PATH_MAX];
 
-    log_msg("bb_rmdir(path=\"%s\")\n",
+    log_msg("tmpfs_rmdir(path=\"%s\")\n",
            path);
-    assert(0);
 
-    return log_syscall("rmdir", rmdir(fpath), 0);
+    int retstat = 0;
+
+    struct inode* inode;
+    retstat = resolve_inode(path, -1, &inode);
+    if (retstat) goto ret;
+
+    if (inode->type != DIRECTORY) {
+        retstat = -ENOTDIR;
+        goto ret;
+    }
+    struct dir* dir = inode->data_ptr;
+
+    // first two entries is .. and ., so skip it
+    for (struct dentry* i = dir->entries + 2; i != dir->entries + INODES_IN_DIRECTORY; ++i) {
+        if (i->is_active) {
+            retstat = -ENOTEMPTY;
+            goto ret;
+        }
+    }
+
+    inode->is_active = 0;
+    free(dir);
+
+    ret:
+    return retstat;
 }
 
 // TODO
@@ -239,7 +260,6 @@ int tmpfs_link(const char *path, const char *newpath)
     return log_syscall("link", link(fpath, fnewpath), 0);
 }
 
-
 // TODO
 /** Change the size of a file */
 int tmpfs_truncate(const char *path, off_t newsize)
@@ -254,16 +274,6 @@ int tmpfs_truncate(const char *path, off_t newsize)
 }
 
 // TODO
-/** File open operation
- *
- * No creation, or truncation flags (O_CREAT, O_EXCL, O_TRUNC)
- * will be passed to open().  Open should check if the operation
- * is permitted for the given flags.  Optionally open may also
- * return an arbitrary filehandle in the fuse_file_info structure,
- * which will be passed to all file operations.
- *
- * Changed in version 2.2
- */
 int tmpfs_open(const char *path, struct fuse_file_info *fi)
 {
     int retstat = 0;
@@ -289,22 +299,6 @@ int tmpfs_open(const char *path, struct fuse_file_info *fi)
 }
 
 // TODO
-/** Read data from an open file
- *
- * Read should return exactly the number of bytes requested except
- * on EOF or error, otherwise the rest of the data will be
- * substituted with zeroes.  An exception to this is when the
- * 'direct_io' mount option is specified, in which case the return
- * value of the read system call will reflect the return value of
- * this operation.
- *
- * Changed in version 2.2
- */
-// I don't fully understand the documentation above -- it doesn't
-// match the documentation for the read() system call which says it
-// can return with anything up to the amount of data requested. nor
-// with the fusexmp code which returns the amount of data also
-// returned by read.
 int tmpfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
     int retstat = 0;
@@ -318,16 +312,6 @@ int tmpfs_read(const char *path, char *buf, size_t size, off_t offset, struct fu
 }
 
 // TODO
-/** Write data to an open file
- *
- * Write should return exactly the number of bytes requested
- * except on error.  An exception to this is when the 'direct_io'
- * mount option is specified (see read operation).
- *
- * Changed in version 2.2
- */
-// As  with read(), the documentation above is inconsistent with the
-// documentation for the write() system call.
 int tmpfs_write(const char *path, const char *buf, size_t size, off_t offset,
             struct fuse_file_info *fi)
 {
@@ -343,20 +327,6 @@ int tmpfs_write(const char *path, const char *buf, size_t size, off_t offset,
 }
 
 // TODO
-/** Release an open file
- *
- * Release is called when there are no more references to an open
- * file: all file descriptors are closed and all memory mappings
- * are unmapped.
- *
- * For every open() call there will be exactly one release() call
- * with the same flags and file descriptor.  It is possible to
- * have a file opened more than once, in which case only the last
- * release will mean, that no more reads/writes will happen on the
- * file.  The return value of release is ignored.
- *
- * Changed in version 2.2
- */
 int tmpfs_release(const char *path, struct fuse_file_info *fi)
 {
     log_msg("\nbb_release(path=\"%s\", fi=0x%08x)\n",
@@ -368,49 +338,18 @@ int tmpfs_release(const char *path, struct fuse_file_info *fi)
     return log_syscall("close", close(fi->fh), 0);
 }
 
-/** Open directory
- *
- * This method should check if the open operation is permitted for
- * this  directory
- *
- * Introduced in version 2.3
- */
 int tmpfs_opendir(const char *path, struct fuse_file_info *fi)
 {
     log_msg("\ntmpfs_opendir(path=\"%s\", fi=0x%08x)\n",
          path, fi);
 
-    int res = resolve_inode(path, -1);
-    if (res >= 0) {
-        struct inode* inode = (struct inode*) res;
+    struct inode* inode;
+    int retstat = resolve_inode(path, -1, &inode);
+    if (!retstat) {
         fi->fh = inode;
-        return 0;
-    } else {
-        return res;
     }
+    return retstat;
 }
-
-/** Read directory
- *
- * This supersedes the old getdir() interface.  New applications
- * should use this.
- *
- * The filesystem may choose between two modes of operation:
- *
- * 1) The readdir implementation ignores the offset parameter, and
- * passes zero to the filler function's offset.  The filler
- * function will not return '1' (unless an error happens), so the
- * whole directory is read in a single readdir operation.  This
- * works just like the old getdir() method.
- *
- * 2) The readdir implementation keeps track of the offsets of the
- * directory entries.  It uses the offset parameter and always
- * passes non-zero offset to the filler function.  When the buffer
- * is full (or an error happens) the filler function will return
- * '1'.
- *
- * Introduced in version 2.3
- */
 
 int tmpfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset,
               struct fuse_file_info *fi)
@@ -429,8 +368,9 @@ int tmpfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t off
         if (entry->is_active) {
            log_msg("calling filler with name %s\n", entry->name);
            if (filler(buf, entry->name, NULL, 0) != 0) {
-               log_msg("    ERROR bb_readdir filler:  buffer full");
-               return -ENOMEM;
+               log_msg("    ERROR tmpfs_readdir filler:  buffer full");
+               retstat = -ENOMEM;
+               break;
            }
         }
     }
@@ -438,23 +378,6 @@ int tmpfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t off
     return retstat;
 }
 
-/**
- * Initialize filesystem
- *
- * The return value will passed in the private_data field of
- * fuse_context to all file operations and as a parameter to the
- * destroy() method.
- *
- * Introduced in version 2.3
- * Changed in version 2.6
- */
-// Undocumented but extraordinarily useful fact:  the fuse_context is
-// set up before this function is called, and
-// fuse_get_context()->private_data returns the user_data passed to
-// fuse_main().  Really seems like either it should be a third
-// parameter coming in here, or else the fact should be documented
-// (and this might as well return void, as it did in older versions of
-// FUSE).
 void *tmpfs_init(struct fuse_conn_info *conn)
 {
     log_msg("\ntmpfs_init()\n");
@@ -466,41 +389,22 @@ void *tmpfs_init(struct fuse_conn_info *conn)
 }
 
 // TODO
-/**
- * Clean up filesystem
- *
- * Called on filesystem exit.
- *
- * Introduced in version 2.3
- */
 void tmpfs_destroy(void *userdata)
 {
     log_msg("\nbb_destroy(userdata=0x%08x)\n", userdata);
 }
 
-/**
- * Check file access permissions
- *
- * This will be called for the access() system call.  If the
- * 'default_permissions' mount option is given, this method is not
- * called.
- *
- * This method is not called under Linux kernel versions 2.4.x
- *
- * Introduced in version 2.5
- */
 int tmpfs_access(const char *path, int mask)
 {
     log_msg("\ntmpfs_access(path=\"%s\", mask=0%o)\n",
            path, mask);
 
-    int res = resolve_inode(path, -1);
-    if (res >= 0) {
-        struct inode* inode = (struct inode*) res;
-        return inode->stat.st_mode & mask;
-    } else {
-        return res;
+    struct inode* inode;
+    int retstat = resolve_inode(path, -1, &inode);
+    if (!retstat) {
+        retstat = (inode->stat.st_mode & mask ? 0 : -EACCES);
     }
+    return retstat;
 }
 
 struct fuse_operations tmpfs_oper = {
@@ -510,7 +414,7 @@ struct fuse_operations tmpfs_oper = {
   .mknod = tmpfs_mknod,
   .mkdir = tmpfs_mkdir, // done
   .unlink = tmpfs_unlink,
-  .rmdir = tmpfs_rmdir,
+  .rmdir = tmpfs_rmdir, // done
   .rename = tmpfs_rename,
   .link = tmpfs_link,
   .truncate = tmpfs_truncate,
