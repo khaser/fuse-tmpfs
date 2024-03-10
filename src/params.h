@@ -26,15 +26,9 @@
 
 #include <sys/stat.h>
 
-enum inode_type {
-    REGULAR = 1,
-    DIRECTORY = 2
-};
-
 struct inode {
     struct stat stat;
-    enum inode_type type;
-    void* data_ptr; // struct dir if directory, raw file data otherwise
+    void* data_ptr; // struct dir if directory, struct reg if regular file
     struct inode *parent;
     char is_active;
 };
@@ -47,6 +41,11 @@ struct dentry {
 
 struct dir {
     struct dentry entries[INODES_IN_DIRECTORY];
+};
+
+struct reg {
+    unsigned int size;
+    void* content;
 };
 
 #include <limits.h>

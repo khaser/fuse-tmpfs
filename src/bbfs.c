@@ -142,6 +142,46 @@ static int alloc_inode(struct inode **res)
     return retstat;
 }
 
+static int add_node(const char *path, mode_t mode, struct inode** res_inode)
+{
+    int retstat = 0;
+
+    struct inode* inode;
+    retstat = alloc_inode(&inode);
+    if (retstat) {
+        goto ret;
+    }
+
+    inode->stat.st_mode |= mode;
+    struct fuse_context* ctx = fuse_get_context();
+    inode->stat.st_uid = ctx->uid;
+    inode->stat.st_gid = ctx->gid;
+    retstat = resolve_inode(path, -2, &inode->parent);
+    if (retstat) {
+        goto ret;
+    }
+    inode->is_active = 1;
+
+    // Dentry for inserting to parent dir
+    struct dentry dentry;
+    dentry.is_active = 1;
+    dentry.inode = inode;
+
+    const char *comp_name = strrchr(path, '/') + 1;
+
+    if (strlen(comp_name) >= NAME_LEN) {
+        retstat = -ENAMETOOLONG;
+        goto ret;
+    }
+    strcpy(dentry.name, comp_name);
+
+    retstat = add_dentry(inode->parent->data_ptr, dentry);
+
+    *res_inode = inode;
+    ret:
+    return retstat;
+}
+
 int tmpfs_getattr(const char *path, struct stat *statbuf)
 {
     int retstat = 0;
@@ -159,56 +199,30 @@ int tmpfs_getattr(const char *path, struct stat *statbuf)
 
 int tmpfs_mknod(const char *path, mode_t mode, dev_t dev)
 {
-    int retstat = -ENOMEM;
-    log_msg("\ntmpfs_mknod(path=%s, mode=0%3o, dev=%lld)\n", path, mode, dev);
-
+    int retstat = 0;
+    struct inode* inode;
+    retstat = add_node(path, mode | S_IFREG, &inode);
+    if (!retstat) {
+        struct reg* reg = malloc(sizeof(struct reg));
+        reg->size = 0;
+        reg->content = malloc(0);
+        inode->data_ptr = reg;
+    }
     return retstat;
 }
 
 int tmpfs_mkdir(const char *path, mode_t mode)
 {
     int retstat = 0;
-    log_msg("\nmkdir(path=%s, mode=0%3o)\n", path, mode);
-
     struct inode* inode;
-    retstat = alloc_inode(&inode);
-    if (retstat) {
-        goto ret;
+    retstat = add_node(path, mode | S_IFDIR, &inode);
+    if (!retstat) {
+        inode->data_ptr = init_dir(inode, inode->parent);
     }
-
-    inode->stat.st_mode |= S_IFDIR | mode;
-    struct fuse_context* ctx = fuse_get_context();
-    inode->stat.st_uid = ctx->uid;
-    inode->stat.st_gid = ctx->gid;
-    retstat = resolve_inode(path, -2, &inode->parent);
-    if (retstat) {
-        goto ret;
-    }
-    inode->data_ptr = init_dir(inode, inode->parent);
-    inode->type = DIRECTORY;
-    inode->is_active = 1;
-
-    // Dentry for inserting to parent dir
-    struct dentry dentry;
-    dentry.is_active = 1;
-    dentry.inode = inode;
-
-    char *dirname = strrchr(path, '/') + 1;
-
-    if (strlen(dirname) >= NAME_LEN) {
-        retstat = -ENAMETOOLONG;
-        goto ret;
-    }
-    strcpy(dentry.name, dirname);
-
-    retstat = add_dentry(inode->parent->data_ptr, dentry);
-
-    ret:
     return retstat;
 }
 
 // TODO
-/** Remove a file */
 int tmpfs_unlink(const char *path)
 {
     char fpath[PATH_MAX];
@@ -231,7 +245,7 @@ int tmpfs_rmdir(const char *path)
     retstat = resolve_inode(path, -1, &inode);
     if (retstat) goto ret;
 
-    if (inode->type != DIRECTORY) {
+    if ((inode->stat.st_mode & S_IFDIR) == 0) {
         retstat = -ENOTDIR;
         goto ret;
     }
@@ -497,7 +511,7 @@ int main(int argc, char *argv[])
     struct dir *dir = init_dir(tmpfs_data->inodes, tmpfs_data->inodes);
     struct stat stat;
     stat.st_mode |= S_IFDIR;
-    tmpfs_data->inodes[0] = (struct inode) { stat, DIRECTORY, dir, tmpfs_data->inodes, 1 };
+    tmpfs_data->inodes[0] = (struct inode) { stat, dir, tmpfs_data->inodes, 1 };
 
     // turn over control to fuse
     fprintf(stderr, "about to call fuse_main\n");
