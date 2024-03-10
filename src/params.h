@@ -20,13 +20,42 @@
 // setlinebuf() later in consequence.
 #define _XOPEN_SOURCE 500
 
-// maintain bbfs state in here
+#define NAME_LEN 255
+#define INODES_LIMIT 128
+#define INODES_IN_DIRECTORY 32
+
+#include <sys/stat.h>
+
+enum inode_type {
+    REGULAR = 1,
+    DIRECTORY = 2
+};
+
+struct inode {
+    struct stat stat;
+    enum inode_type type;
+    // struct dir if directory, raw file data otherwise
+    void* data_ptr;
+    struct inode *parent;
+    char is_active;
+};
+
+struct dentry {
+    char name[NAME_LEN];
+    struct inode *inode;
+    char is_active;
+};
+
+struct dir {
+    struct dentry entries[INODES_IN_DIRECTORY];
+};
+
 #include <limits.h>
 #include <stdio.h>
-struct bb_state {
-    FILE *logfile;
-    char *rootdir;
+struct tmpfs_state {
+    struct inode inodes[INODES_LIMIT];
 };
-#define BB_DATA ((struct bb_state *) fuse_get_context()->private_data)
+
+#define TMPFS_DATA ((struct tmpfs_state*) fuse_get_context()->private_data)
 
 #endif
