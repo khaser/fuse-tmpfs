@@ -100,11 +100,6 @@ static int resolve_inode(const char *path, int req_component)
     return cur;
 }
 
-///////////////////////////////////////////////////////////
-//
-// Prototypes for all these functions, and the C-style comments,
-// come from /usr/include/fuse.h
-//
 /** Get file attributes.
  *
  * Similar to stat().  The 'st_dev' and 'st_blksize' fields are
@@ -125,27 +120,7 @@ int tmpfs_getattr(const char *path, struct stat *statbuf)
     return 0;
 }
 
-/** Read the target of a symbolic link
- *
- * The buffer should be filled with a null terminated string.  The
- * buffer size argument includes the space for the terminating
- * null character.  If the linkname is too long to fit in the
- * buffer, it should be truncated.  The return value should be 0
- * for success.
- */
-// Note the system readlink() will truncate and lose the terminating
-// null.  So, the size passed to to the system readlink() must be one
-// less than the size passed to bb_readlink()
-// bb_readlink() code by Bernardo F Costa (thanks!)
-int tmpfs_readlink(const char *path, char *link, size_t size)
-{
-    int retstat = 0;
-    log_msg("\nbb_readlink(path=\"%s\", link=\"%s\", size=%d)\n",
-         path, link, size);
-    assert(0);
-    return retstat;
-}
-
+// TODO
 /** Create a file node
  *
  * There is no create() operation, mknod() will be called for
@@ -177,6 +152,9 @@ int tmpfs_mkdir(const char *path, mode_t mode)
         if (!TMPFS_DATA->inodes[i].is_active) {
             struct stat stat;
             stat.st_mode |= S_IFDIR | mode;
+            struct fuse_context* ctx = fuse_get_context();
+            stat.st_uid = ctx->uid;
+            stat.st_gid = ctx->gid;
 
             int tmp = resolve_inode(path, -2);
             if (tmp < 0) {
@@ -205,6 +183,7 @@ int tmpfs_mkdir(const char *path, mode_t mode)
     return -ENOMEM;
 }
 
+// TODO
 /** Remove a file */
 int tmpfs_unlink(const char *path)
 {
@@ -217,6 +196,7 @@ int tmpfs_unlink(const char *path)
     return log_syscall("unlink", unlink(fpath), 0);
 }
 
+// TODO
 /** Remove a directory */
 int tmpfs_rmdir(const char *path)
 {
@@ -229,22 +209,7 @@ int tmpfs_rmdir(const char *path)
     return log_syscall("rmdir", rmdir(fpath), 0);
 }
 
-/** Create a symbolic link */
-// The parameters here are a little bit confusing, but do correspond
-// to the symlink() system call.  The 'path' is where the link points,
-// while the 'link' is the link itself.  So we need to leave the path
-// unaltered, but insert the link into the mounted directory.
-int tmpfs_symlink(const char *path, const char *link)
-{
-    char flink[PATH_MAX];
-
-    log_msg("\nbb_symlink(path=\"%s\", link=\"%s\")\n",
-           path, link);
-    assert(0);
-
-    return log_syscall("symlink", symlink(path, flink), 0);
-}
-
+// TODO
 /** Rename a file */
 // both path and newpath are fs-relative
 int tmpfs_rename(const char *path, const char *newpath)
@@ -260,6 +225,7 @@ int tmpfs_rename(const char *path, const char *newpath)
     return log_syscall("rename", rename(fpath, fnewpath), 0);
 }
 
+// TODO
 /** Create a hard link to a file */
 int tmpfs_link(const char *path, const char *newpath)
 {
@@ -273,31 +239,8 @@ int tmpfs_link(const char *path, const char *newpath)
     return log_syscall("link", link(fpath, fnewpath), 0);
 }
 
-/** Change the permission bits of a file */
-int tmpfs_chmod(const char *path, mode_t mode)
-{
-    char fpath[PATH_MAX];
 
-    log_msg("\nbb_chmod(fpath=\"%s\", mode=0%03o)\n",
-           path, mode);
-    assert(0);
-
-    return log_syscall("chmod", chmod(fpath, mode), 0);
-}
-
-/** Change the owner and group of a file */
-int tmpfs_chown(const char *path, uid_t uid, gid_t gid)
-
-{
-    char fpath[PATH_MAX];
-
-    log_msg("\nbb_chown(path=\"%s\", uid=%d, gid=%d)\n",
-           path, uid, gid);
-    assert(0);
-
-    return log_syscall("chown", chown(fpath, uid, gid), 0);
-}
-
+// TODO
 /** Change the size of a file */
 int tmpfs_truncate(const char *path, off_t newsize)
 {
@@ -310,19 +253,7 @@ int tmpfs_truncate(const char *path, off_t newsize)
     return log_syscall("truncate", truncate(fpath, newsize), 0);
 }
 
-/** Change the access and/or modification times of a file */
-/* note -- I'll want to change this as soon as 2.6 is in debian testing */
-int tmpfs_utime(const char *path, struct utimbuf *ubuf)
-{
-    char fpath[PATH_MAX];
-
-    log_msg("\nbb_utime(path=\"%s\", ubuf=0x%08x)\n",
-           path, ubuf);
-    assert(0);
-
-    return log_syscall("utime", utime(fpath, ubuf), 0);
-}
-
+// TODO
 /** File open operation
  *
  * No creation, or truncation flags (O_CREAT, O_EXCL, O_TRUNC)
@@ -357,6 +288,7 @@ int tmpfs_open(const char *path, struct fuse_file_info *fi)
     return retstat;
 }
 
+// TODO
 /** Read data from an open file
  *
  * Read should return exactly the number of bytes requested except
@@ -385,6 +317,7 @@ int tmpfs_read(const char *path, char *buf, size_t size, off_t offset, struct fu
     return log_syscall("pread", pread(fi->fh, buf, size, offset), 0);
 }
 
+// TODO
 /** Write data to an open file
  *
  * Write should return exactly the number of bytes requested
@@ -409,63 +342,7 @@ int tmpfs_write(const char *path, const char *buf, size_t size, off_t offset,
     return log_syscall("pwrite", pwrite(fi->fh, buf, size, offset), 0);
 }
 
-/** Get file system statistics
- *
- * The 'f_frsize', 'f_favail', 'f_fsid' and 'f_flag' fields are ignored
- *
- * Replaced 'struct statfs' parameter with 'struct statvfs' in
- * version 2.5
- */
-int tmpfs_statfs(const char *path, struct statvfs *statv)
-{
-    int retstat = 0;
-    char fpath[PATH_MAX];
-
-    log_msg("\nbb_statfs(path=\"%s\", statv=0x%08x)\n",
-           path, statv);
-    assert(0);
-
-    // get stats for underlying filesystem
-    retstat = log_syscall("statvfs", statvfs(fpath, statv), 0);
-
-    log_statvfs(statv);
-
-    return retstat;
-}
-
-/** Possibly flush cached data
- *
- * BIG NOTE: This is not equivalent to fsync().  It's not a
- * request to sync dirty data.
- *
- * Flush is called on each close() of a file descriptor.  So if a
- * filesystem wants to return write errors in close() and the file
- * has cached dirty data, this is a good place to write back data
- * and return any errors.  Since many applications ignore close()
- * errors this is not always useful.
- *
- * NOTE: The flush() method may be called more than once for each
- * open().  This happens if more than one file descriptor refers
- * to an opened file due to dup(), dup2() or fork() calls.  It is
- * not possible to determine if a flush is final, so each flush
- * should be treated equally.  Multiple write-flush sequences are
- * relatively rare, so this shouldn't be a problem.
- *
- * Filesystems shouldn't assume that flush will always be called
- * after some writes, or that if will be called at all.
- *
- * Changed in version 2.2
- */
-// this is a no-op in BBFS.  It just logs the call and returns success
-int tmpfs_flush(const char *path, struct fuse_file_info *fi)
-{
-    log_msg("\nbb_flush(path=\"%s\", fi=0x%08x)\n", path, fi);
-    // no need to get fpath on this one, since I work from fi->fh not the path
-    log_fi(fi);
-
-    return 0;
-}
-
+// TODO
 /** Release an open file
  *
  * Release is called when there are no more references to an open
@@ -491,103 +368,6 @@ int tmpfs_release(const char *path, struct fuse_file_info *fi)
     return log_syscall("close", close(fi->fh), 0);
 }
 
-/** Synchronize file contents
- *
- * If the datasync parameter is non-zero, then only the user data
- * should be flushed, not the meta data.
- *
- * Changed in version 2.2
- */
-int tmpfs_fsync(const char *path, int datasync, struct fuse_file_info *fi)
-{
-    log_msg("\nbb_fsync(path=\"%s\", datasync=%d, fi=0x%08x)\n",
-           path, datasync, fi);
-    log_fi(fi);
-
-    // some unix-like systems (notably freebsd) don't have a datasync call
-#ifdef HAVE_FDATASYNC
-    if (datasync)
-       return log_syscall("fdatasync", fdatasync(fi->fh), 0);
-    else
-#endif
-       return log_syscall("fsync", fsync(fi->fh), 0);
-}
-
-#ifdef HAVE_SYS_XATTR_H
-/** Note that my implementations of the various xattr functions use
-    the 'l-' versions of the functions (eg bb_setxattr() calls
-    lsetxattr() not setxattr(), etc).  This is because it appears any
-    symbolic links are resolved before the actual call takes place, so
-    I only need to use the system-provided calls that don't follow
-    them */
-
-/** Set extended attributes */
-int tmpfs_setxattr(const char *path, const char *name, const char *value, size_t size, int flags)
-{
-    char fpath[PATH_MAX];
-
-    log_msg("\nbb_setxattr(path=\"%s\", name=\"%s\", value=\"%s\", size=%d, flags=0x%08x)\n",
-           path, name, value, size, flags);
-    assert(0);
-
-    return log_syscall("lsetxattr", lsetxattr(fpath, name, value, size, flags), 0);
-}
-
-/** Get extended attributes */
-int tmpfs_getxattr(const char *path, const char *name, char *value, size_t size)
-{
-    int retstat = 0;
-    char fpath[PATH_MAX];
-
-    log_msg("\nbb_getxattr(path = \"%s\", name = \"%s\", value = 0x%08x, size = %d)\n",
-           path, name, value, size);
-    assert(0);
-
-    retstat = log_syscall("lgetxattr", lgetxattr(fpath, name, value, size), 0);
-    if (retstat >= 0)
-       log_msg("    value = \"%s\"\n", value);
-
-    return retstat;
-}
-
-/** List extended attributes */
-int tmpfs_listxattr(const char *path, char *list, size_t size)
-{
-    int retstat = 0;
-    char fpath[PATH_MAX];
-    char *ptr;
-
-    log_msg("\nbb_listxattr(path=\"%s\", list=0x%08x, size=%d)\n",
-           path, list, size
-           );
-    assert(0);
-
-    retstat = log_syscall("llistxattr", llistxattr(fpath, list, size), 0);
-    if (retstat >= 0) {
-       log_msg("    returned attributes (length %d):\n", retstat);
-       if (list != NULL)
-           for (ptr = list; ptr < list + retstat; ptr += strlen(ptr)+1)
-              log_msg("    \"%s\"\n", ptr);
-       else
-           log_msg("    (null)\n");
-    }
-
-    return retstat;
-}
-
-/** Remove extended attributes */
-int tmpfs_removexattr(const char *path, const char *name)
-{
-    char fpath[PATH_MAX];
-
-    log_msg("\nbb_removexattr(path=\"%s\", name=\"%s\")\n",
-           path, name);
-    assert(0);
-
-    return log_syscall("lremovexattr", lremovexattr(fpath, name), 0);
-}
-#endif
-
 /** Open directory
  *
  * This method should check if the open operation is permitted for
@@ -599,16 +379,15 @@ int tmpfs_opendir(const char *path, struct fuse_file_info *fi)
 {
     log_msg("\ntmpfs_opendir(path=\"%s\", fi=0x%08x)\n",
          path, fi);
-    struct inode* inode = resolve_inode(path, -1);
-    fi->fh = inode;
-    log_msg("    opendir returned 0x%p\n", inode);
 
-    // TODO better catch error reasons
-    if (inode == 0) {
-        return 1;
+    int res = resolve_inode(path, -1);
+    if (res >= 0) {
+        struct inode* inode = (struct inode*) res;
+        fi->fh = inode;
+        return 0;
+    } else {
+        return res;
     }
-
-    return 0;
 }
 
 /** Read directory
@@ -659,26 +438,6 @@ int tmpfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t off
     return retstat;
 }
 
-/** Synchronize directory contents
- *
- * If the datasync parameter is non-zero, then only the user data
- * should be flushed, not the meta data
- *
- * Introduced in version 2.3
- */
-// when exactly is this called?  when a user calls fsync and it
-// happens to be a directory? ??? >>> I need to implement this...
-int tmpfs_fsyncdir(const char *path, int datasync, struct fuse_file_info *fi)
-{
-    int retstat = 0;
-
-    log_msg("\nbb_fsyncdir(path=\"%s\", datasync=%d, fi=0x%08x)\n",
-           path, datasync, fi);
-    log_fi(fi);
-
-    return retstat;
-}
-
 /**
  * Initialize filesystem
  *
@@ -706,6 +465,7 @@ void *tmpfs_init(struct fuse_conn_info *conn)
     return TMPFS_DATA;
 }
 
+// TODO
 /**
  * Clean up filesystem
  *
@@ -734,128 +494,34 @@ int tmpfs_access(const char *path, int mask)
     log_msg("\ntmpfs_access(path=\"%s\", mask=0%o)\n",
            path, mask);
 
-    struct inode* inode = resolve_inode(path, -1);
-    return inode->stat.st_mode & mask;
-}
-
-/**
- * Create and open a file
- *
- * If the file does not exist, first create it with the specified
- * mode, and then open it.
- *
- * If this method is not implemented or under Linux kernel
- * versions earlier than 2.6.15, the mknod() and open() methods
- * will be called instead.
- *
- * Introduced in version 2.5
- */
-// Not implemented.  I had a version that used creat() to create and
-// open the file, which it turned out opened the file write-only.
-
-/**
- * Change the size of an open file
- *
- * This method is called instead of the truncate() method if the
- * truncation was invoked from an ftruncate() system call.
- *
- * If this method is not implemented or under Linux kernel
- * versions earlier than 2.6.15, the truncate() method will be
- * called instead.
- *
- * Introduced in version 2.5
- */
-int tmpfs_ftruncate(const char *path, off_t offset, struct fuse_file_info *fi)
-{
-    int retstat = 0;
-
-    log_msg("\nbb_ftruncate(path=\"%s\", offset=%lld, fi=0x%08x)\n",
-           path, offset, fi);
-    log_fi(fi);
-
-    retstat = ftruncate(fi->fh, offset);
-    if (retstat < 0)
-       retstat = log_error("bb_ftruncate ftruncate");
-
-    return retstat;
-}
-
-/**
- * Get attributes from an open file
- *
- * This method is called instead of the getattr() method if the
- * file information is available.
- *
- * Currently this is only called after the create() method if that
- * is implemented (see above).  Later it may be called for
- * invocations of fstat() too.
- *
- * Introduced in version 2.5
- */
-int tmpfs_fgetattr(const char *path, struct stat *statbuf, struct fuse_file_info *fi)
-{
-    int retstat = 0;
-
-    log_msg("\nbb_fgetattr(path=\"%s\", statbuf=0x%08x, fi=0x%08x)\n",
-           path, statbuf, fi);
-    log_fi(fi);
-
-    // On FreeBSD, trying to do anything with the mountpoint ends up
-    // opening it, and then using the FD for an fgetattr.  So in the
-    // special case of a path of "/", I need to do a getattr on the
-    // underlying root directory instead of doing the fgetattr().
-    if (!strcmp(path, "/"))
-       return tmpfs_getattr(path, statbuf);
-
-    retstat = fstat(fi->fh, statbuf);
-    if (retstat < 0)
-       retstat = log_error("bb_fgetattr fstat");
-
-    log_stat(statbuf);
-
-    return retstat;
+    int res = resolve_inode(path, -1);
+    if (res >= 0) {
+        struct inode* inode = (struct inode*) res;
+        return inode->stat.st_mode & mask;
+    } else {
+        return res;
+    }
 }
 
 struct fuse_operations tmpfs_oper = {
-  .getattr = tmpfs_getattr,
-  .opendir = tmpfs_opendir,
-  .readlink = tmpfs_readlink,
-  // no .getdir -- that's deprecated
+  .getattr = tmpfs_getattr, // done
+  .opendir = tmpfs_opendir, // done
   .getdir = NULL,
   .mknod = tmpfs_mknod,
-  .mkdir = tmpfs_mkdir,
+  .mkdir = tmpfs_mkdir, // done
   .unlink = tmpfs_unlink,
   .rmdir = tmpfs_rmdir,
-  .symlink = tmpfs_symlink,
   .rename = tmpfs_rename,
   .link = tmpfs_link,
-  .chmod = tmpfs_chmod,
-  .chown = tmpfs_chown,
   .truncate = tmpfs_truncate,
-  .utime = tmpfs_utime,
   .open = tmpfs_open,
   .read = tmpfs_read,
   .write = tmpfs_write,
-  /** Just a placeholder, don't set */ // huh???
-  .statfs = tmpfs_statfs,
-  .flush = tmpfs_flush,
   .release = tmpfs_release,
-  .fsync = tmpfs_fsync,
-
-#ifdef HAVE_SYS_XATTR_H
-  .setxattr = tmpfs_setxattr,
-  .getxattr = tmpfs_getxattr,
-  .listxattr = tmpfs_listxattr,
-  .removexattr = tmpfs_removexattr,
-#endif
-
-  .readdir = tmpfs_readdir,
-  .fsyncdir = tmpfs_fsyncdir,
-  .init = tmpfs_init,
+  .readdir = tmpfs_readdir, // done
+  .init = tmpfs_init, // done
   .destroy = tmpfs_destroy,
-  .access = tmpfs_access,
-  .ftruncate = tmpfs_ftruncate,
-  .fgetattr = tmpfs_fgetattr
+  .access = tmpfs_access, // done
 };
 
 void tmpfs_usage()
