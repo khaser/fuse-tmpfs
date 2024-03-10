@@ -45,23 +45,55 @@
 #include <assert.h>
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
-static int add_dentry(struct dir* dir, const struct dentry dentry)
+static int _add_dentry(struct dir *dir, const struct dentry dentry)
 {
-    int retstat = -EMLINK;
+    int retstat = 0;
+
+    struct dentry *to_alloc;
 
     for (struct dentry *entry = dir->entries; entry != dir->entries + INODES_IN_DIRECTORY; ++entry) {
         if (!entry->is_active) {
-            memcpy(entry, &dentry, sizeof(struct dentry));
-            retstat = 0;
-            break;
+            to_alloc = entry;
+        } else {
+            if (strcmp(dentry.name, entry->name) == 0) {
+                retstat = -EEXIST;
+                goto ret;
+            }
         }
     }
 
+    if (to_alloc) {
+        memcpy(to_alloc, &dentry, sizeof(struct dentry));
+    } else {
+        retstat = -EMLINK;
+    }
+
+    ret:
+    return retstat;
+}
+
+static int add_dentry(const char *path, struct inode *target_inode, struct inode *dir_inode) {
+    int retstat = 0;
+    struct dentry dentry;
+    dentry.is_active = 1;
+    dentry.inode = target_inode;
+
+    const char *comp_name = strrchr(path, '/') + 1;
+
+    if (strlen(comp_name) >= NAME_LEN) {
+        retstat = -ENAMETOOLONG;
+        goto ret;
+    }
+    strcpy(dentry.name, comp_name);
+
+    retstat = _add_dentry(dir_inode->data_ptr, dentry);
+    ret:
     return retstat;
 }
 
 static int rm_dentry(struct dir* dir, const struct inode* inode)
 {
+    // TODO: rewrite to recursive variant to work correctly with hard links
     int retstat = 0;
 
     for (struct dentry *entry = dir->entries; entry != dir->entries + INODES_IN_DIRECTORY; ++entry) {
@@ -119,14 +151,15 @@ static int resolve_inode(const char *path, int req_component, struct inode **res
         }
 
         retstat = -ENOENT;
+        log_msg("resolve enoent");
         break;
 
         found:
         path = next_token;
     }
 
-    log_msg("    tmpfs_resolve:  path = %s, inode = %p\n", path, cur);
     *res = cur;
+    log_msg("resolve success");
     return retstat;
 }
 
@@ -143,7 +176,7 @@ static int alloc_inode(struct inode **res)
     return retstat;
 }
 
-static int add_node(const char *path, mode_t mode, struct inode** res_inode)
+static int add_node(const char *path, mode_t mode, struct inode **res_inode)
 {
     int retstat = 0;
 
@@ -163,22 +196,7 @@ static int add_node(const char *path, mode_t mode, struct inode** res_inode)
         goto ret;
     }
     inode->is_active = 1;
-
-    // Dentry for inserting to parent dir
-    struct dentry dentry;
-    dentry.is_active = 1;
-    dentry.inode = inode;
-
-    const char *comp_name = strrchr(path, '/') + 1;
-
-    if (strlen(comp_name) >= NAME_LEN) {
-        retstat = -ENAMETOOLONG;
-        goto ret;
-    }
-    strcpy(dentry.name, comp_name);
-
-    retstat = add_dentry(inode->parent->data_ptr, dentry);
-
+    add_dentry(path, inode, inode->parent);
     *res_inode = inode;
     ret:
     return retstat;
@@ -281,16 +299,31 @@ int tmpfs_rename(const char *path, const char *newpath)
     return log_syscall("rename", rename(fpath, fnewpath), 0);
 }
 
-/** Create a hard link to a file */
 int tmpfs_link(const char *path, const char *newpath)
 {
-    char fpath[PATH_MAX], fnewpath[PATH_MAX];
+    struct inode* target_inode;
+    int retstat = resolve_inode(path, -1, &target_inode);
+    if (retstat) {
+        goto ret;
+    }
+    if (target_inode->stat.st_mode & S_IFDIR) {
+        retstat = -EPERM;
+        goto ret;
+    }
 
-    log_msg("\nbb_link(path=\"%s\", newpath=\"%s\")\n",
-           path, newpath);
-    assert(0);
+    struct inode* dir_inode;
+    retstat = resolve_inode(newpath, -2, &dir_inode);
+    if (retstat) {
+        goto ret;
+    }
 
-    return log_syscall("link", link(fpath, fnewpath), 0);
+    retstat = add_dentry(newpath, target_inode, dir_inode);
+    if (!retstat) {
+        target_inode->stat.st_nlink++;
+    }
+
+    ret:
+    return retstat;
 }
 
 int tmpfs_truncate(const char *path, off_t newsize)
