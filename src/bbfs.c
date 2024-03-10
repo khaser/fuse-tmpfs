@@ -157,6 +157,7 @@ static int add_node(const char *path, mode_t mode, struct inode** res_inode)
     struct fuse_context* ctx = fuse_get_context();
     inode->stat.st_uid = ctx->uid;
     inode->stat.st_gid = ctx->gid;
+    inode->stat.st_nlink = 1;
     retstat = resolve_inode(path, -2, &inode->parent);
     if (retstat) {
         goto ret;
@@ -221,16 +222,15 @@ int tmpfs_mkdir(const char *path, mode_t mode)
     return retstat;
 }
 
-// TODO
 int tmpfs_unlink(const char *path)
 {
-    char fpath[PATH_MAX];
-
-    log_msg("bb_unlink(path=\"%s\")\n",
-           path);
-    assert(0);
-
-    return log_syscall("unlink", unlink(fpath), 0);
+    struct inode* inode;
+    int retstat = resolve_inode(path, -1, &inode);
+    if (!retstat && --inode->stat.st_nlink == 0 && inode->open_count == 0) {
+        inode->is_active = 0;
+        rm_dentry(inode->parent->data_ptr, inode);
+    }
+    return retstat;
 }
 
 int tmpfs_rmdir(const char *path)
@@ -268,8 +268,6 @@ int tmpfs_rmdir(const char *path)
 }
 
 // TODO
-/** Rename a file */
-// both path and newpath are fs-relative
 int tmpfs_rename(const char *path, const char *newpath)
 {
     char fpath[PATH_MAX];
@@ -283,7 +281,6 @@ int tmpfs_rename(const char *path, const char *newpath)
     return log_syscall("rename", rename(fpath, fnewpath), 0);
 }
 
-// TODO
 /** Create a hard link to a file */
 int tmpfs_link(const char *path, const char *newpath)
 {
@@ -291,7 +288,6 @@ int tmpfs_link(const char *path, const char *newpath)
 
     log_msg("\nbb_link(path=\"%s\", newpath=\"%s\")\n",
            path, newpath);
-    assert(0);
     assert(0);
 
     return log_syscall("link", link(fpath, fnewpath), 0);
@@ -324,6 +320,7 @@ int tmpfs_open(const char *path, struct fuse_file_info *fi)
     if (!retstat) {
         if (inode->stat.st_mode & S_IFREG) {
             fi->fh = inode;
+            inode->open_count++;
         } else {
             retstat = -EISDIR;
         }
@@ -366,9 +363,9 @@ int tmpfs_write(const char *path, const char *buf, size_t size, off_t offset,
 
 int tmpfs_release(const char *path, struct fuse_file_info *fi)
 {
-    int retstat = 0;
-    // TODO
-    return retstat;
+    struct inode* inode = fi->fh;
+    inode->open_count--;
+    return 0;
 }
 
 int tmpfs_opendir(const char *path, struct fuse_file_info *fi)
@@ -446,10 +443,10 @@ struct fuse_operations tmpfs_oper = {
   .getdir = NULL,
   .mknod = tmpfs_mknod, // done
   .mkdir = tmpfs_mkdir, // done
-  .unlink = tmpfs_unlink,
+  .unlink = tmpfs_unlink, // done
   .rmdir = tmpfs_rmdir, // done
   .rename = tmpfs_rename,
-  .link = tmpfs_link,
+  .link = tmpfs_link, // done
   .truncate = tmpfs_truncate, // done
   .open = tmpfs_open, // done
   .read = tmpfs_read, // done

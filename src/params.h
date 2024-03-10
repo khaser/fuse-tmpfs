@@ -25,12 +25,14 @@
 #define INODES_IN_DIRECTORY 32
 
 #include <sys/stat.h>
+#include <stdlib.h>
 
 struct inode {
     struct stat stat;
     void* data_ptr; // struct dir if directory, struct reg if regular file
     struct inode *parent;
     char is_active;
+    size_t open_count;
 };
 
 struct dentry {
