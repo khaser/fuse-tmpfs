@@ -34,8 +34,7 @@ enum inode_type {
 struct inode {
     struct stat stat;
     enum inode_type type;
-    // struct dir if directory, raw file data otherwise
-    void* data_ptr;
+    void* data_ptr; // struct dir if directory, raw file data otherwise
     struct inode *parent;
     char is_active;
 };

@@ -59,6 +59,22 @@ static int add_dentry(struct dir* dir, const struct dentry dentry)
     return retstat;
 }
 
+static int rm_dentry(struct dir* dir, const struct inode* inode)
+{
+    int retstat = 0;
+
+    for (struct dentry *entry = dir->entries; entry != dir->entries + INODES_IN_DIRECTORY; ++entry) {
+        if (entry->is_active && entry->inode == inode) {
+            entry->is_active = 0;
+            goto ret;
+        }
+    }
+    assert(0 && "Inode not found in directory on delete");
+
+    ret:
+    return retstat;
+}
+
 static struct dir* init_dir(struct inode *self, struct inode *parent)
 {
     struct dir *dir = malloc(sizeof(struct dir));
@@ -113,6 +129,19 @@ static int resolve_inode(const char *path, int req_component, struct inode **res
     return retstat;
 }
 
+static int alloc_inode(struct inode **res)
+{
+    int retstat = -EDQUOT;
+    for (struct inode* i = TMPFS_DATA->inodes; i < TMPFS_DATA->inodes + INODES_LIMIT; ++i) {
+        if (!i->is_active) {
+            retstat = 0;
+            *res = i;
+            break;
+        }
+    }
+    return retstat;
+}
+
 int tmpfs_getattr(const char *path, struct stat *statbuf)
 {
     int retstat = 0;
@@ -128,59 +157,53 @@ int tmpfs_getattr(const char *path, struct stat *statbuf)
     return retstat;
 }
 
-// TODO
-/** Create a file node
- *
- * There is no create() operation, mknod() will be called for
- * creation of all non-directory, non-symlink nodes.
- */
-// shouldn't that comment be "if" there is no.... ?
 int tmpfs_mknod(const char *path, mode_t mode, dev_t dev)
 {
-    int retstat = 0;
-    log_msg("\nbb_mknod(path=\"%s\", mode=0%3o, dev=%lld)\n",
-         path, mode, dev);
-    assert(0);
+    int retstat = -ENOMEM;
+    log_msg("\ntmpfs_mknod(path=%s, mode=0%3o, dev=%lld)\n", path, mode, dev);
+
     return retstat;
 }
 
 int tmpfs_mkdir(const char *path, mode_t mode)
 {
-    int retstat = -ENOMEM;
-    log_msg("\nmkdir(path=\"%s\", mode=0%3o)\n", path, mode);
-    int i = 0;
-    for (; i < INODES_LIMIT; ++i) {
-        if (!TMPFS_DATA->inodes[i].is_active) {
-            struct stat stat;
-            stat.st_mode |= S_IFDIR | mode;
-            struct fuse_context* ctx = fuse_get_context();
-            stat.st_uid = ctx->uid;
-            stat.st_gid = ctx->gid;
+    int retstat = 0;
+    log_msg("\nmkdir(path=%s, mode=0%3o)\n", path, mode);
 
-            struct inode* parent_inode;
-            retstat = resolve_inode(path, -2, &parent_inode);
-            if (retstat) break;
-
-            struct dir *dir = init_dir(TMPFS_DATA->inodes + i, parent_inode);
-            TMPFS_DATA->inodes[i] = (struct inode) { stat, DIRECTORY, dir, parent_inode, 1 };
-
-            struct dentry dentry;
-            dentry.is_active = 1;
-            dentry.inode = TMPFS_DATA->inodes + i;
-
-            char *dirname = strrchr(path, '/') + 1;
-
-            if (strlen(dirname) >= NAME_LEN) {
-                retstat = -ENAMETOOLONG;
-                break;
-            }
-            strcpy(dentry.name, dirname);
-
-            retstat = add_dentry(parent_inode->data_ptr, dentry);
-            break;
-        }
+    struct inode* inode;
+    retstat = alloc_inode(&inode);
+    if (retstat) {
+        goto ret;
     }
 
+    inode->stat.st_mode |= S_IFDIR | mode;
+    struct fuse_context* ctx = fuse_get_context();
+    inode->stat.st_uid = ctx->uid;
+    inode->stat.st_gid = ctx->gid;
+    retstat = resolve_inode(path, -2, &inode->parent);
+    if (retstat) {
+        goto ret;
+    }
+    inode->data_ptr = init_dir(inode, inode->parent);
+    inode->type = DIRECTORY;
+    inode->is_active = 1;
+
+    // Dentry for inserting to parent dir
+    struct dentry dentry;
+    dentry.is_active = 1;
+    dentry.inode = inode;
+
+    char *dirname = strrchr(path, '/') + 1;
+
+    if (strlen(dirname) >= NAME_LEN) {
+        retstat = -ENAMETOOLONG;
+        goto ret;
+    }
+    strcpy(dentry.name, dirname);
+
+    retstat = add_dentry(inode->parent->data_ptr, dentry);
+
+    ret:
     return retstat;
 }
 
@@ -199,7 +222,6 @@ int tmpfs_unlink(const char *path)
 
 int tmpfs_rmdir(const char *path)
 {
-
     log_msg("tmpfs_rmdir(path=\"%s\")\n",
            path);
 
@@ -225,6 +247,8 @@ int tmpfs_rmdir(const char *path)
 
     inode->is_active = 0;
     free(dir);
+
+    rm_dentry(inode->parent->data_ptr, inode);
 
     ret:
     return retstat;
