@@ -30,7 +30,7 @@ void log_msg(const char *format, ...)
     va_list ap;
     va_start(ap, format);
 
-    /* fprintf(stderr, format, ap); */
+    fprintf(stderr, format, ap);
 }
 
 // Report errors to logfile and give -errno to caller

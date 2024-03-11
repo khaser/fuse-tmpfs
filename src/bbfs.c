@@ -286,18 +286,35 @@ int tmpfs_rmdir(const char *path)
     return retstat;
 }
 
-// TODO
 int tmpfs_rename(const char *path, const char *newpath)
 {
-    char fpath[PATH_MAX];
-    char fnewpath[PATH_MAX];
+    // Check that newpath is not subdirectory of path
+    int retstat = 0;
+    if (strstr(newpath, path) == newpath) {
+        retstat = -EINVAL;
+        goto ret;
+    }
 
-    log_msg("\nbb_rename(fpath=\"%s\", newpath=\"%s\")\n",
-           path, newpath);
-    assert(0);
-    assert(0);
+    struct inode* inode;
+    retstat = resolve_inode(path, -1, &inode);
+    if (retstat) {
+        goto ret;
+    }
+    retstat = rm_dentry(inode->parent->data_ptr, inode);
+    if (retstat) {
+        goto ret;
+    }
 
-    return log_syscall("rename", rename(fpath, fnewpath), 0);
+    struct inode* dir_inode;
+    retstat = resolve_inode(newpath, -2, &dir_inode);
+    if (retstat) {
+        goto ret;
+    }
+
+    retstat = add_dentry(newpath, inode, dir_inode);
+
+    ret:
+    return retstat;
 }
 
 int tmpfs_link(const char *path, const char *newpath)
@@ -385,7 +402,6 @@ int tmpfs_write(const char *path, const char *buf, size_t size, off_t offset,
     struct inode* inode = fi->fh;
 
     if (size + offset > inode->stat.st_size) {
-        // TODO oom case error catch
         inode->data_ptr = realloc(inode->data_ptr, size + offset);
         inode->stat.st_size = size + offset;
     }
@@ -447,8 +463,6 @@ int tmpfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t off
 
 void *tmpfs_init(struct fuse_conn_info *conn)
 {
-    log_msg("\ntmpfs_init()\n");
-
     log_conn(conn);
     log_fuse_context(fuse_get_context());
 
@@ -482,7 +496,7 @@ struct fuse_operations tmpfs_oper = {
   .mkdir = tmpfs_mkdir, // done
   .unlink = tmpfs_unlink, // done
   .rmdir = tmpfs_rmdir, // done
-  .rename = tmpfs_rename,
+  .rename = tmpfs_rename, // done
   .link = tmpfs_link, // done
   .truncate = tmpfs_truncate, // done
   .open = tmpfs_open, // done
@@ -539,7 +553,10 @@ int main(int argc, char *argv[])
 
     struct dir *dir = init_dir(tmpfs_data->inodes, tmpfs_data->inodes);
     struct stat stat;
-    stat.st_mode |= S_IFDIR;
+    stat.st_uid = getuid();
+    stat.st_gid = getgid();
+    stat.st_mode = S_IFDIR | 0x1ed;
+    stat.st_nlink = 1;
     tmpfs_data->inodes[0] = (struct inode) { stat, dir, tmpfs_data->inodes, 1 };
 
     // turn over control to fuse
