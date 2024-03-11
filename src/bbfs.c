@@ -241,11 +241,17 @@ int tmpfs_unlink(const char *path)
     struct inode* inode;
     int retstat = resolve_inode(path, -1, &inode);
     if (!retstat) {
-        rm_dentry(inode->parent->data_ptr, inode);
+        struct inode* parent_inode;
+        retstat = resolve_inode(path, -2, &parent_inode);
+        if (retstat) {
+            goto ret;
+        }
+        rm_dentry(parent_inode->data_ptr, inode);
         if (--inode->stat.st_nlink == 0 && inode->open_count == 0) {
             inode->is_active = 0;
         }
     }
+    ret:
     return retstat;
 }
 
@@ -294,7 +300,12 @@ int tmpfs_rename(const char *path, const char *newpath)
     if (retstat) {
         goto ret;
     }
-    retstat = rm_dentry(inode->parent->data_ptr, inode);
+    struct inode* parent_inode;
+    retstat = resolve_inode(path, -2, &parent_inode);
+    if (retstat) {
+        goto ret;
+    }
+    retstat = rm_dentry(parent_inode->data_ptr, inode);
     if (retstat) {
         goto ret;
     }
