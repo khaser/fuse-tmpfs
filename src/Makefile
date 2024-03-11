@@ -110,11 +110,11 @@ am__v_P_1 = :
 AM_V_GEN = $(am__v_GEN_$(V))
 am__v_GEN_ = $(am__v_GEN_$(AM_DEFAULT_VERBOSITY))
 am__v_GEN_0 = @echo "  GEN     " $@;
-am__v_GEN_1 = 
+am__v_GEN_1 =
 AM_V_at = $(am__v_at_$(V))
 am__v_at_ = $(am__v_at_$(AM_DEFAULT_VERBOSITY))
 am__v_at_0 = @
-am__v_at_1 = 
+am__v_at_1 =
 DEFAULT_INCLUDES = -I.
 depcomp = $(SHELL) $(top_srcdir)/depcomp
 am__depfiles_maybe = depfiles
@@ -124,13 +124,13 @@ COMPILE = $(CC) $(DEFS) $(DEFAULT_INCLUDES) $(INCLUDES) $(AM_CPPFLAGS) \
 AM_V_CC = $(am__v_CC_$(V))
 am__v_CC_ = $(am__v_CC_$(AM_DEFAULT_VERBOSITY))
 am__v_CC_0 = @echo "  CC      " $@;
-am__v_CC_1 = 
+am__v_CC_1 =
 CCLD = $(CC)
 LINK = $(CCLD) $(AM_CFLAGS) $(CFLAGS) $(AM_LDFLAGS) $(LDFLAGS) -o $@
 AM_V_CCLD = $(am__v_CCLD_$(V))
 am__v_CCLD_ = $(am__v_CCLD_$(AM_DEFAULT_VERBOSITY))
 am__v_CCLD_0 = @echo "  CCLD    " $@;
-am__v_CCLD_1 = 
+am__v_CCLD_1 =
 SOURCES = $(bbfs_SOURCES)
 DIST_SOURCES = $(bbfs_SOURCES)
 am__can_run_installinfo = \
@@ -172,15 +172,15 @@ CC = gcc
 CCDEPMODE = depmode=gcc3
 CFLAGS = -g -O2
 CPP = gcc -E
-CPPFLAGS = 
+CPPFLAGS =
 CYGPATH_W = echo
 DEFS = -DHAVE_CONFIG_H
 DEPDIR = .deps
-ECHO_C = 
+ECHO_C =
 ECHO_N = -n
-ECHO_T = 
+ECHO_T =
 EGREP = /nix/store/rx2wig5yhpbwhnqxdy4z7qivj9ln7fab-gnugrep-3.11/bin/grep -E
-EXEEXT = 
+EXEEXT =
 FUSE_CFLAGS = -D_FILE_OFFSET_BITS=64 -I/nix/store/9wx3gd9ls50mcsagin70bdvarb8hh4j7-fuse-2.9.9/include/fuse
 FUSE_LIBS = -L/nix/store/9wx3gd9ls50mcsagin70bdvarb8hh4j7-fuse-2.9.9/lib -lfuse -pthread
 GREP = /nix/store/rx2wig5yhpbwhnqxdy4z7qivj9ln7fab-gnugrep-3.11/bin/grep
@@ -189,10 +189,10 @@ INSTALL_DATA = ${INSTALL} -m 644
 INSTALL_PROGRAM = ${INSTALL}
 INSTALL_SCRIPT = ${INSTALL}
 INSTALL_STRIP_PROGRAM = $(install_sh) -c -s
-LDFLAGS = 
-LIBOBJS = 
-LIBS = 
-LTLIBOBJS = 
+LDFLAGS =
+LIBOBJS =
+LIBS =
+LTLIBOBJS =
 MAKEINFO = ${SHELL} /home/khaser/sp/OS/homeworks/1/missing makeinfo
 MKDIR_P = /nix/store/bblyj5b3ii8n6v4ra0nb37cmi3lf8rz9-coreutils-9.3/bin/mkdir -p
 OBJEXT = o
@@ -201,13 +201,13 @@ PACKAGE_BUGREPORT = joseph@pfeifferfamily.net
 PACKAGE_NAME = fuse-tutorial
 PACKAGE_STRING = fuse-tutorial 2018-02-04
 PACKAGE_TARNAME = fuse-tutorial
-PACKAGE_URL = 
+PACKAGE_URL =
 PACKAGE_VERSION = 2018-02-04
 PATH_SEPARATOR = :
 PKG_CONFIG = pkg-config
-PKG_CONFIG_LIBDIR = 
+PKG_CONFIG_LIBDIR =
 PKG_CONFIG_PATH = /nix/store/9wx3gd9ls50mcsagin70bdvarb8hh4j7-fuse-2.9.9/lib/pkgconfig
-SET_MAKE = 
+SET_MAKE =
 SHELL = /nix/store/q1c2flcykgr4wwg5a6h450hxbk4ch589-bash-5.2-p15/bin/bash
 STRIP = strip
 VERSION = 2018-02-04
@@ -218,18 +218,18 @@ abs_top_srcdir = /home/khaser/sp/OS/homeworks/1
 ac_ct_CC = gcc
 am__include = include
 am__leading_dot = .
-am__quote = 
+am__quote =
 am__tar = $${TAR-tar} chof - "$$tardir"
 am__untar = $${TAR-tar} xf -
 bindir = ${exec_prefix}/bin
-build_alias = 
+build_alias =
 builddir = .
 datadir = ${datarootdir}
 datarootdir = ${prefix}/share
 docdir = ${datarootdir}/doc/${PACKAGE_TARNAME}
 dvidir = ${docdir}
 exec_prefix = ${prefix}
-host_alias = 
+host_alias =
 htmldir = ${docdir}
 includedir = ${prefix}/include
 infodir = ${datarootdir}/info
@@ -250,11 +250,11 @@ sbindir = ${exec_prefix}/sbin
 sharedstatedir = ${prefix}/com
 srcdir = .
 sysconfdir = ${prefix}/etc
-target_alias = 
+target_alias =
 top_build_prefix = ../
 top_builddir = ..
 top_srcdir = ..
-bbfs_SOURCES = bbfs.c log.c log.h  params.h
+bbfs_SOURCES = bbfs.c params.h
 AM_CFLAGS = -D_FILE_OFFSET_BITS=64 -I/nix/store/9wx3gd9ls50mcsagin70bdvarb8hh4j7-fuse-2.9.9/include/fuse
 LDADD = -L/nix/store/9wx3gd9ls50mcsagin70bdvarb8hh4j7-fuse-2.9.9/lib -lfuse -pthread
 all: config.h
@@ -299,7 +299,7 @@ config.h: stamp-h1
 stamp-h1: $(srcdir)/config.h.in $(top_builddir)/config.status
 	@rm -f stamp-h1
 	cd $(top_builddir) && $(SHELL) ./config.status src/config.h
-$(srcdir)/config.h.in:  $(am__configure_deps) 
+$(srcdir)/config.h.in:  $(am__configure_deps)
 	($(am__cd) $(top_srcdir) && $(AUTOHEADER))
 	rm -f stamp-h1
 	touch $@
@@ -349,7 +349,7 @@ uninstall-binPROGRAMS:
 clean-binPROGRAMS:
 	-test -z "$(bin_PROGRAMS)" || rm -f $(bin_PROGRAMS)
 
-bbfs$(EXEEXT): $(bbfs_OBJECTS) $(bbfs_DEPENDENCIES) $(EXTRA_bbfs_DEPENDENCIES) 
+bbfs$(EXEEXT): $(bbfs_OBJECTS) $(bbfs_DEPENDENCIES) $(EXTRA_bbfs_DEPENDENCIES)
 	@rm -f bbfs$(EXEEXT)
 	$(AM_V_CCLD)$(LINK) $(bbfs_OBJECTS) $(bbfs_LDADD) $(LIBS)
 

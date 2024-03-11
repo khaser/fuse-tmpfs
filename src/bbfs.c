@@ -41,11 +41,10 @@
 #include <sys/xattr.h>
 #endif
 
-#include "log.h"
 #include <assert.h>
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
-static int _add_dentry(struct dir *dir, const struct dentry dentry)
+static int _add_dentry(struct dir *dir, const struct dentry *dentry)
 {
     int retstat = 0;
 
@@ -55,7 +54,7 @@ static int _add_dentry(struct dir *dir, const struct dentry dentry)
         if (!entry->is_active) {
             to_alloc = entry;
         } else {
-            if (strcmp(dentry.name, entry->name) == 0) {
+            if (strcmp(dentry->name, entry->name) == 0) {
                 retstat = -EEXIST;
                 goto ret;
             }
@@ -63,7 +62,7 @@ static int _add_dentry(struct dir *dir, const struct dentry dentry)
     }
 
     if (to_alloc) {
-        memcpy(to_alloc, &dentry, sizeof(struct dentry));
+        memcpy(to_alloc, dentry, sizeof(struct dentry));
     } else {
         retstat = -EMLINK;
     }
@@ -86,7 +85,7 @@ static int add_dentry(const char *path, struct inode *target_inode, struct inode
     }
     strcpy(dentry.name, comp_name);
 
-    retstat = _add_dentry(dir_inode->data_ptr, dentry);
+    retstat = _add_dentry(dir_inode->data_ptr, &dentry);
     ret:
     return retstat;
 }
@@ -143,14 +142,13 @@ static int resolve_inode(const char *path, int req_component, struct inode **res
         struct dir* dir = cur->data_ptr;
 
         for (struct dentry *entry = dir->entries; entry != dir->entries + INODES_IN_DIRECTORY; ++entry) {
-            if (entry->is_active && memcmp(path + 1, entry->name, next_token - path - 1) == 0) {
+            if (entry->is_active && strlen(entry->name) == next_token - path && memcmp(path + 1, entry->name, next_token - path) == 0) {
                 cur = entry->inode;
                 goto found;
             }
         }
 
         retstat = -ENOENT;
-        log_msg("resolve enoent");
         break;
 
         found:
@@ -158,7 +156,6 @@ static int resolve_inode(const char *path, int req_component, struct inode **res
     }
 
     *res = cur;
-    log_msg("resolve success");
     return retstat;
 }
 
@@ -168,6 +165,7 @@ static int alloc_inode(struct inode **res)
     for (struct inode* i = TMPFS_DATA->inodes; i < TMPFS_DATA->inodes + INODES_LIMIT; ++i) {
         if (!i->is_active) {
             retstat = 0;
+            i->stat.st_ino = i - TMPFS_DATA->inodes;
             *res = i;
             break;
         }
@@ -204,7 +202,6 @@ static int add_node(const char *path, mode_t mode, struct inode **res_inode)
 int tmpfs_getattr(const char *path, struct stat *statbuf)
 {
     int retstat = 0;
-    log_msg("\ntmpfs_getattr(path=\"%s\", statbuf=0x%08x)\n", path, statbuf);
 
     struct inode* inode;
     retstat = resolve_inode(path, -1, &inode);
@@ -254,9 +251,6 @@ int tmpfs_unlink(const char *path)
 
 int tmpfs_rmdir(const char *path)
 {
-    log_msg("tmpfs_rmdir(path=\"%s\")\n",
-           path);
-
     int retstat = 0;
 
     struct inode* inode;
@@ -423,9 +417,6 @@ int tmpfs_release(const char *path, struct fuse_file_info *fi)
 
 int tmpfs_opendir(const char *path, struct fuse_file_info *fi)
 {
-    log_msg("\ntmpfs_opendir(path=\"%s\", fi=0x%08x)\n",
-         path, fi);
-
     struct inode* inode;
     int retstat = resolve_inode(path, -1, &inode);
     if (!retstat) {
@@ -440,18 +431,12 @@ int tmpfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t off
     int retstat = 0;
     struct dirent *de;
 
-    log_msg("\ntmpfs_readdir(path=\"%s\", buf=0x%08x, filler=0x%08x, offset=%lld, fi=0x%08x)\n",
-           path, buf, filler, offset, fi);
-
-    // once again, no need for fullpath -- but note that I need to cast fi->fh
     struct inode *inode = (struct inode*) fi->fh;
 
     struct dir *dir = inode->data_ptr;
     for (struct dentry* entry = dir->entries; entry != dir->entries + INODES_IN_DIRECTORY; ++entry) {
         if (entry->is_active) {
-           log_msg("calling filler with name %s\n", entry->name);
            if (filler(buf, entry->name, NULL, 0) != 0) {
-               log_msg("    ERROR tmpfs_readdir filler:  buffer full");
                retstat = -ENOMEM;
                break;
            }
@@ -463,23 +448,16 @@ int tmpfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t off
 
 void *tmpfs_init(struct fuse_conn_info *conn)
 {
-    log_conn(conn);
-    log_fuse_context(fuse_get_context());
-
     return TMPFS_DATA;
 }
 
 // TODO
 void tmpfs_destroy(void *userdata)
 {
-    log_msg("\nbb_destroy(userdata=0x%08x)\n", userdata);
 }
 
 int tmpfs_access(const char *path, int mask)
 {
-    log_msg("\ntmpfs_access(path=\"%s\", mask=0%o)\n",
-           path, mask);
-
     struct inode* inode;
     int retstat = resolve_inode(path, -1, &inode);
     if (!retstat) {
@@ -545,7 +523,7 @@ int main(int argc, char *argv[])
     if ((argc < 2) || (argv[argc-1][0] == '-'))
        tmpfs_usage();
 
-    tmpfs_data = malloc(sizeof(struct tmpfs_state));
+    tmpfs_data = calloc(1, sizeof(struct tmpfs_state));
     if (tmpfs_data == NULL) {
        perror("main calloc");
        abort();
