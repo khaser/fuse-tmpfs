@@ -142,7 +142,7 @@ static int resolve_inode(const char *path, int req_component, struct inode **res
         struct dir* dir = cur->data_ptr;
 
         for (struct dentry *entry = dir->entries; entry != dir->entries + INODES_IN_DIRECTORY; ++entry) {
-            if (entry->is_active && strlen(entry->name) == next_token - path && memcmp(path + 1, entry->name, next_token - path) == 0) {
+            if (entry->is_active && strlen(entry->name) == next_token - (path + 1) && memcmp(path + 1, entry->name, next_token - path - 1) == 0) {
                 cur = entry->inode;
                 goto found;
             }
