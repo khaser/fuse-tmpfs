@@ -3,3 +3,5 @@
 
 За основу был взят код проекта:
 <https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/>
+
+В качестве системы сборки используется cmake + pkgconfig

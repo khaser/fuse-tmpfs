@@ -27,7 +27,7 @@
           let &path.="src,${pkgs.glibc.dev}/include"
           let g:ycm_clangd_binary_path = '${pkgs.clang-tools}/bin/clangd'
 
-          au filetype c nmap <F1> :!bear -- make <CR>
+          au filetype c nmap <F1> :!cmake --build build<CR>
         '';
       });
     in {
@@ -36,11 +36,11 @@
 
         nativeBuildInputs = with pkgs; [
           gcc # compiler
+          cmake
           pkg-config
 
           configured-vim
           clang-tools # clangd(language server)
-          bear # generate compiler flags for language server
           gdb
 
           fuse

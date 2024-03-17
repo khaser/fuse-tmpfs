@@ -1,27 +1,3 @@
-/*
-  Big Brother File System
-  Copyright (C) 2012 Joseph J. Pfeiffer, Jr., Ph.D. <pfeiffer@cs.nmsu.edu>
-
-  This program can be distributed under the terms of the GNU GPLv3.
-  See the file COPYING.
-
-  This code is derived from function prototypes found /usr/include/fuse/fuse.h
-  Copyright (C) 2001-2007  Miklos Szeredi <miklos@szeredi.hu>
-  His code is licensed under the LGPLv2.
-  A copy of that code is included in the file fuse.h
-
-  The point of this FUSE filesystem is to provide an introduction to
-  FUSE.  It was my first FUSE filesystem as I got to know the
-  software; hopefully, the comments in this code will help people who
-  follow later to get a gentler introduction.
-
-  This might be called a no-op filesystem:  it doesn't impose
-  filesystem semantics on top of any other existing structure.  It
-  simply reports the requests that come in, and passes them to an
-  underlying filesystem.  The information is saved in a logfile named
-  bbfs.log, in the directory from which you run bbfs.
-*/
-#include "config.h"
 #include "params.h"
 
 #include <ctype.h>
@@ -375,7 +351,7 @@ int tmpfs_open(const char *path, struct fuse_file_info *fi)
     retstat = resolve_inode(path, -1, &inode);
     if (!retstat) {
         if (inode->stat.st_mode & S_IFREG) {
-            fi->fh = inode;
+            fi->fh = (uint64_t) inode;
             inode->open_count++;
         } else {
             retstat = -EISDIR;
@@ -388,7 +364,7 @@ int tmpfs_open(const char *path, struct fuse_file_info *fi)
 int tmpfs_read(const char *path, char *buf, size_t size, off_t offset, struct fuse_file_info *fi)
 {
     int retstat = 0;
-    struct inode* inode = fi->fh;
+    struct inode* inode = (struct inode*) fi->fh;
 
     int to_read = MIN((inode->stat.st_size - offset) - size, size);
     if (to_read < 0) {
@@ -404,7 +380,7 @@ int tmpfs_read(const char *path, char *buf, size_t size, off_t offset, struct fu
 int tmpfs_write(const char *path, const char *buf, size_t size, off_t offset,
             struct fuse_file_info *fi)
 {
-    struct inode* inode = fi->fh;
+    struct inode* inode = (struct inode*) fi->fh;
 
     if (size + offset > inode->stat.st_size) {
         inode->data_ptr = realloc(inode->data_ptr, size + offset);
@@ -418,7 +394,7 @@ int tmpfs_write(const char *path, const char *buf, size_t size, off_t offset,
 
 int tmpfs_release(const char *path, struct fuse_file_info *fi)
 {
-    struct inode* inode = fi->fh;
+    struct inode* inode = (struct inode*) fi->fh;
     inode->open_count--;
     if (inode->stat.st_nlink == 0 && inode->open_count == 0) {
         inode->is_active = 0;
@@ -431,7 +407,7 @@ int tmpfs_opendir(const char *path, struct fuse_file_info *fi)
     struct inode* inode;
     int retstat = resolve_inode(path, -1, &inode);
     if (!retstat) {
-        fi->fh = inode;
+        fi->fh = (uint64_t) inode;
     }
     return retstat;
 }
@@ -462,11 +438,6 @@ void *tmpfs_init(struct fuse_conn_info *conn)
     return TMPFS_DATA;
 }
 
-// TODO
-void tmpfs_destroy(void *userdata)
-{
-}
-
 int tmpfs_access(const char *path, int mask)
 {
     struct inode* inode;
@@ -494,13 +465,12 @@ struct fuse_operations tmpfs_oper = {
   .release = tmpfs_release, // done
   .readdir = tmpfs_readdir, // done
   .init = tmpfs_init, // done
-  .destroy = tmpfs_destroy,
   .access = tmpfs_access, // done
 };
 
 void tmpfs_usage()
 {
-    fprintf(stderr, "usage:  bbfs [FUSE and mount options] rootDir mountPoint\n");
+    fprintf(stderr, "usage:  tmpfs [FUSE and mount options] mountPoint\n");
     abort();
 }
 
@@ -509,15 +479,6 @@ int main(int argc, char *argv[])
     int fuse_stat;
     struct tmpfs_state *tmpfs_data;
 
-    // bbfs doesn't do any access checking on its own (the comment
-    // blocks in fuse.h mention some of the functions that need
-    // accesses checked -- but note there are other functions, like
-    // chown(), that also need checking!).  Since running bbfs as root
-    // will therefore open Metrodome-sized holes in the system
-    // security, we'll check if root is trying to mount the filesystem
-    // and refuse if it is.  The somewhat smaller hole of an ordinary
-    // user doing it with the allow_other flag is still there because
-    // I don't want to parse the options string.
     if ((getuid() == 0) || (geteuid() == 0)) {
            fprintf(stderr, "Running TMPFS as root opens unnacceptable security holes\n");
            return 1;
