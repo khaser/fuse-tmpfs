@@ -90,18 +90,22 @@ static struct dir* init_dir(struct inode *self, struct inode *parent)
     return dir;
 }
 
+static int cnt_components(const char *path) {
+    int components = 0;
+    const char *i = path;
+    for (; *i != '\0'; ++i) {
+        components += (*i == '/');
+    }
+    components += (*(i-1) != '/');
+    return components;
+}
+
 static int resolve_inode(const char *path, int req_component, struct inode **res)
 {
     int retstat = 0;
 
     if (req_component < 0) {
-        int components = 0;
-        const char *i = path;
-        for (; *i != '\0'; ++i) {
-            components += (*i == '/');
-        }
-        components += (*(i-1) != '/');
-        req_component = components + req_component;
+        req_component += cnt_components(path);
     }
 
     struct inode *cur = TMPFS_DATA->inodes;
@@ -262,12 +266,34 @@ int tmpfs_rmdir(const char *path)
     return retstat;
 }
 
+static int check_subpath(const char *path, const char *newpath) {
+    int retstat = 0;
+    struct inode* src;
+    retstat = resolve_inode(path, -1, &src);
+    if (retstat) {
+        goto ret;
+    }
+
+    for (int i = 0; i < cnt_components(newpath) - 1; ++i) {
+        struct inode* tmp;
+        retstat = resolve_inode(newpath, i, &tmp);
+        if (retstat) {
+            goto ret;
+        }
+        if (tmp == src) {
+            return 1;
+        }
+    }
+
+    ret:
+    return retstat;
+}
+
 int tmpfs_rename(const char *path, const char *newpath)
 {
-    // Check that newpath is not subdirectory of path
-    int retstat = 0;
-    if (strstr(newpath, path) == newpath) {
-        retstat = -EINVAL;
+    int retstat = check_subpath(path, newpath);
+    if (retstat) {
+        retstat = (-EINVAL ? retstat == 1 : retstat);
         goto ret;
     }
 
